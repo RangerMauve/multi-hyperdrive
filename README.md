@@ -1,6 +1,8 @@
 # multi-hyperdrive
 Take a bunch of hyperdrives, and read from them as if they were one.
 
+Inspired by [peerfs](https://github.com/karissa/peerfs/blob/master/index.js)
+
 ## Goals
 
 - Don't manage drives
