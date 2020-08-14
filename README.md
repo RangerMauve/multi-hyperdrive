@@ -17,7 +17,7 @@ Inspired by [peerfs](https://github.com/karissa/peerfs/blob/master/index.js)
 ```js
 const MultiDrive = require('multi-hyperdrive')
 
-const drives = new MultiDrive([])
+const drives = new MultiDrive(primaryDrive)
 
 drives.addDrive(drive1)
 drives.addDrive(drive2)
