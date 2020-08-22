@@ -1,7 +1,7 @@
 # multi-hyperdrive
 Take a bunch of hyperdrives, and read from them as if they were one.
 
-Inspired by [peerfs](https://github.com/karissa/peerfs/blob/master/index.js)
+Inspired by [peerfs](https://github.com/karissa/peerfs/) and [kappa-drive](https://gitlab.com/coboxcoop/kappa-drive)
 
 ## Goals
 
@@ -10,9 +10,8 @@ Inspired by [peerfs](https://github.com/karissa/peerfs/blob/master/index.js)
   - Doesn't store list of drives
   - Doesn't handle replication for you
 - Support (most) hyperdrive methods / properties
-- Work with the Dat SDK
 
-## Dream API
+## API
 
 ```js
 const MultiDrive = require('multi-hyperdrive')
@@ -41,13 +40,9 @@ drives.writeFile('/example.txt', 'hello world', (err) => {
 
 ## Concerns
 
-- How should extensions be dealt with?
-  - Specify a primary drive
-- Should all events be propogated?
-  - Just events from the primary drive
-- Accessing metadata feeds?
-- Peers?
-  - Just from the primary drive
+- What does 'version' mean for multiwriter?
+- How should file tombstones be stored?
 - What happens when there's both a file and folder?
-  - Try to error when writing
-  - Error when reading
+  - Try to error when writing?
+  - Error when reading?
+- Vector clocks?
