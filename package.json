@@ -1,0 +1,31 @@
+{
+  "name": "multi-hyperdrive",
+  "version": "1.0.0",
+  "description": "Take a bunch of hyperdrives, and read from them as if they were one.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RangerMauve/multi-hyperdrive.git"
+  },
+  "keywords": [
+    "hyperdrive",
+    "multiwriter",
+    "hypercore",
+    "multi",
+    "writer",
+    "p2p"
+  ],
+  "author": "rangermauve <ranger@mauve.moe> (https://mauve.moe/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RangerMauve/multi-hyperdrive/issues"
+  },
+  "homepage": "https://github.com/RangerMauve/multi-hyperdrive#readme",
+  "devDependencies": {
+    "dat-sdk": "^2.7.0",
+    "tape": "^5.0.1"
+  }
+}

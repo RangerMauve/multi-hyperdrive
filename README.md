@@ -17,6 +17,7 @@ Inspired by [peerfs](https://github.com/karissa/peerfs/blob/master/index.js)
 ```js
 const MultiDrive = require('multi-hyperdrive')
 
+// You must specify a dirve for the `key` and `peers` and stuff
 const drives = new MultiDrive(primaryDrive)
 
 drives.addDrive(drive1)
@@ -41,7 +42,12 @@ drives.writeFile('/example.txt', 'hello world', (err) => {
 ## Concerns
 
 - How should extensions be dealt with?
+  - Specify a primary drive
 - Should all events be propogated?
+  - Just events from the primary drive
 - Accessing metadata feeds?
 - Peers?
+  - Just from the primary drive
 - What happens when there's both a file and folder?
+  - Try to error when writing
+  - Error when reading

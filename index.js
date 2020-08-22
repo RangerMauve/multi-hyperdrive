@@ -10,12 +10,21 @@ class MultiHyperdrive extends EventEmitter {
     super()
 
     this.primary = primary
-    this.writer = null
     this.sources = new Map()
 
     if (!primary) throw new TypeError('Must provide a primary drive')
 
+    // TODO: Listen on events from primary drive and re-emit them
+
     this.addDrive(primary)
+  }
+
+  get key () {
+    return this.primary.key
+  }
+
+  get discoveryKey () {
+    return this.primary.discoveryKey
   }
 
   get version () {
@@ -66,25 +75,69 @@ class MultiHyperdrive extends EventEmitter {
     }
   }
 
-  compareLatest (drive1, drive2, path, cb) {
-    // Default checker function
-    // Check the stats, and return the drive with the latest data for this path
+  // Default checker function
+  // Check the stats, and return the drive with the latest data for this path
+  // If drive1 is newer, return < 0
+  // If drive1 is older, return > 0
+  // If they are the same return 0
+  compareStats (stat1, stat2) {
+    if (!stat1 && !stat2) return 0
+    if (stat1 && !stat2) return -1
+    if (!stat1 && stat2) return 1
+
+    const { ctime: time1 } = stat1
+    const { ctime: time2 } = stat2
+
+    return time2 - time1
   }
 
   resolveLatest (path, cb) {
+    this.runAll('stat', [path], (err, results) => {
+      if(err) return cb(err)
+      try {
+        const sorted = results
+          .filter(({ value }) => !!value)
+          .sort(({ value: stat1 }, { value: stat2 }) => this.compareStats(stat1, stat2))
 
+        if (!sorted.length) return cb(null, this.primary)
+        const { drive } = sorted[0]
+        cb(null, drive)
+      } catch (e) {
+        cb(e)
+      }
+    })
   }
 
   getContent (cb) {
     throw new Error('Not Supported')
   }
 
+  // Open a file descriptor, special cases for writing and reading
+  // See if it's writable or readable
+  // If readable, resolve to latest and open
+  // If writable, open on writer
+  // FD should be an object with the raw FD and the drive to use
+  // cb(null, {fd, drive})
   open (name, flags, cb) {
-    // See if it's writable or readable
-    // If readable, resolve to latest and open
-    // If writable, open on writer
-    // FD should be an object with the raw FD and the drive to use
-    // cb(null, {fd, drive})
+    if (typeof flags === 'function') return this.open(name, 'r', cb)
+
+    const writable = flags.includes('a') || flags.includes('w')
+
+    if (writable) {
+      openFD(this.writerOrPrimary)
+    } else {
+      this.resolveLatest(name, (err, drive) => {
+        if (err) return cb(err)
+        openFD(drive)
+      })
+    }
+
+    function openFD (drive) {
+      drive.open(name, flags, (err, fd) => {
+        if (err) return cb(err)
+        cb(null, { fd, drive })
+      })
+    }
   }
 
   read (fd, buf, offset, len, pos, cb) {
