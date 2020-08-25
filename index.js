@@ -54,6 +54,10 @@ class MultiHyperdrive extends EventEmitter {
     }
   }
 
+  get drives () {
+    return [...this.sources.values()]
+  }
+
   addDrive (drive, cb) {
     drive.ready(() => {
       this.sources.set(drive.key.toString('hex'), drive)
@@ -61,7 +65,7 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   runAll (method, args, cb) {
-    const all = [...this.sources.values()]
+    const all = this.drives
     const total = all.length
     const results = []
 
@@ -93,7 +97,7 @@ class MultiHyperdrive extends EventEmitter {
 
   resolveLatest (path, cb) {
     this.runAll('stat', [path], (err, results) => {
-      if(err) return cb(err)
+      if (err) return cb(err)
       try {
         const sorted = results
           .filter(({ value }) => !!value)
@@ -227,17 +231,44 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   access (name, opts, cb) {
-  // TODO: This seems important
+    if (typeof opts === 'function') return this.exists(name, null, opts)
+    this.runAll('access', [name, opts], (err, results) => {
+      if (err) cb(err)
+      const exists = results.find(({ err }) => !err)
+      if (exists) return cb(null)
+      const firstError = results.find(({ err }) => err)
+      const gotErr = firstError ? firstError.err : null
+      cb(gotErr)
+    })
   }
 
-  exists (name, opts, cb) {
-  // TODO: This seems important
+  exists (name, opts = {}, cb) {
+    if (typeof opts === 'function') return this.exists(name, null, opts)
+    this.access(name, opts, (err) => {
+      const exists = !err
+      cb(exists)
+    })
   }
 
-  readdir (name, opts, cb) {
+  readdir (name, opts = {}, cb) {
+    // TODO: Account for stat objects
     if (typeof opts === 'function') return this.readdir(name, null, opts)
-    // Do a praralell readdir on all sources
-    // Merge each one based on stats
+    this.runAll('readdir', [name, opts], (err, results) => {
+      if (err) return cb(err)
+      let lastError = null
+      const knownItems = new Set()
+      for (const { value, err } of results) {
+        if (err) {
+          lastError = err
+        } else if (value) {
+          for (const item of value) knownItems.add(item)
+        }
+      }
+
+      const items = [...knownItems]
+      if (!items.length && lastError) cb(lastError)
+      else cb(null, items)
+    })
   }
 
   unlink (name, cb) {
@@ -353,10 +384,6 @@ class MultiHyperdrive extends EventEmitter {
 
   removeMetadata (path, key, cb) {
     return this.writerOrPrimary.removeMetadata(path, key, cb)
-  }
-
-  copy (from, to, cb) {
-    return this.writerOrPrimary.copy(from, to, cb)
   }
 
   createTag (name, version, cb) {

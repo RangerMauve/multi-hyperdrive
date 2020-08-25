@@ -4,7 +4,7 @@
   "description": "Take a bunch of hyperdrives, and read from them as if they were one.",
   "main": "index.js",
   "scripts": {
-    "test": "node test"
+    "test": "standard --fix && node test"
   },
   "repository": {
     "type": "git",
@@ -26,6 +26,7 @@
   "homepage": "https://github.com/RangerMauve/multi-hyperdrive#readme",
   "devDependencies": {
     "dat-sdk": "^2.7.0",
+    "standard": "^14.3.4",
     "tape": "^5.0.1"
   }
 }
