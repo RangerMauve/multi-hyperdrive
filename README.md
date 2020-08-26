@@ -136,6 +136,7 @@ The latest version of the file will be found among all the hyperdrives and read.
 ### multi.writeFile (path, buf, opts, cb)
 
 Write a file to a given path.
+One difference from regular hyperdrive is that any parent folders get auto-generated to combat some weird issues with the approach being taken for overlaying multiple drives together.
 Requires a writable drive to be added first.
 `buf` can be either a string, a buffer, or a TypedArray.
 `opts` can either be a `string` for the encoding to use, or an object containing `{encoding, mode, flag}`.
@@ -172,6 +173,8 @@ Namely, you might be interested in `stat.metadata` which is an object containing
 This metadata doesn't get merged among peers yet.
 
 Another useful property is `stat.mount` which contains `{key, version, hash}` for the hyperdrive mounted there.
+
+As well, specific to `multi-hyperdrive` is `stat.drive` which is a reference to the hyperdrive that was determined to contain the latest version of this path.
 
 ### multi.lstat (path, opts, cb)
 
@@ -234,7 +237,18 @@ Close an opened file descriptor.
 
 ### multi.watch (path, onchange)
 
-**NOT SUPPORTED**
+You can watch for changes at a specific path in the drive.
+This will add watchers on each of the writers.
+You will need to invoke `watch` again if you add more drives.
+
+Make sure to clean up watchers once you're done with them to avoid memory leaks.
+
+```javascript
+const watcher = multi.watch('/', () => console.log('Stuff changed'))
+
+// Later
+watcher.destroy()
+```
 
 ### multi.mount (path, key, opts, cb)
 
@@ -304,9 +318,6 @@ Requires a writable drive to be added first.
 
 ## TODO:
 
-- [ ] Handle `stats` option in `readdir`
-- [ ] Watch for changes
-- [ ] Autocreate own folders when writing to dir that only exists on other drives
 - Tombstones for deleted files
  - [ ] Basic tombstones for deletion. Stored in hidden folder in the trie
  - [ ] Override old tombstones on write

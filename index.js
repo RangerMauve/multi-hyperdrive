@@ -1,5 +1,7 @@
 const EventEmitter = require('events')
 const { PassThrough } = require('stream')
+const makeDir = require('make-dir')
+const { dirname } = require('path')
 
 module.exports = function multiHyperdrive (primary) {
   return new MultiHyperdrive(primary)
@@ -128,7 +130,9 @@ class MultiHyperdrive extends EventEmitter {
     const writable = flags.includes('a') || flags.includes('w')
 
     if (writable) {
-      openFD(this.writerOrPrimary)
+      makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+        openFD(this.writerOrPrimary)
+      }).catch(cb)
     } else {
       this.resolveLatest(name, (err, drive) => {
         if (err) return cb(err)
@@ -176,7 +180,15 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   createWriteStream (name, opts) {
-    return this.writerOrPrimary.createWriteStream(name, opts)
+    if (!opts) opts = {}
+    const stream = new PassThrough()
+
+    makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+      const dest = this.writerOrPrimary.createWriteStream(name, opts)
+      stream.pipe(dest)
+    }).catch((e) => stream.destroy(e))
+
+    return stream
   }
 
   readFile (name, opts, cb) {
@@ -190,7 +202,9 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   writeFile (name, buf, opts, cb) {
-    return this.writerOrPrimary.writeFile(name, buf, opts, cb)
+    makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+      this.writerOrPrimary.writeFile(name, buf, opts, cb)
+    }).catch(cb)
   }
 
   truncate (name, size, cb) {
@@ -202,7 +216,8 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   mkdir (name, opts, cb) {
-    return this.writerOrPrimary.mkdir(name, opts, cb)
+    if (typeof opts === 'function') return this.mkdir(name, null, cb)
+    makeDir(name, { fs: this.writerOrPrimary }).then(() => cb(null), cb)
   }
 
   readlink (name, cb) {
@@ -217,7 +232,11 @@ class MultiHyperdrive extends EventEmitter {
     if (!opts) opts = {}
     return this.resolveLatest(name, (err, drive) => {
       if (err) return cb(err)
-      drive.lstat(name, opts, cb)
+      drive.lstat(name, opts, (err, stat) => {
+        if (err) return cb(err)
+        stat.drive = drive
+        cb(null, stat)
+      })
     })
   }
 
@@ -226,7 +245,11 @@ class MultiHyperdrive extends EventEmitter {
     if (!opts) opts = {}
     return this.resolveLatest(name, (err, drive) => {
       if (err) return cb(err)
-      drive.stat(name, opts, cb)
+      drive.stat(name, opts, (err, stat) => {
+        if (err) return cb(err)
+        stat.drive = drive
+        cb(null, stat)
+      })
     })
   }
 
@@ -251,23 +274,49 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   readdir (name, opts = {}, cb) {
-    // TODO: Account for stat objects
     if (typeof opts === 'function') return this.readdir(name, null, opts)
     this.runAll('readdir', [name, opts], (err, results) => {
       if (err) return cb(err)
-      let lastError = null
-      const knownItems = new Set()
-      for (const { value, err } of results) {
-        if (err) {
-          lastError = err
-        } else if (value) {
+      // Honestly, I'm sorry for this code but it's a complex task
+      if (opts && opts.stats) {
+        // Map seen files to the latest stat for it
+        // This is so that we can determine the latest item individually
+        const seenItems = new Map()
+        let lastError = null
+        for (const { value, err, drive } of results) {
+          if (err) {
+            lastError = err
+            continue
+          }
+          for (const { stat, name } of value) {
+            stat.drive = drive
+            if (seenItems.has(name)) {
+              const existing = seenItems.get(name)
+              // If the new stat is "newer" than the old one, replace it
+              if (this.compareStats(existing, stat) > 0) seenItems.put(name, stat)
+            } else seenItems.put(name, stat)
+          }
+          const items = [...seenItems.entries()].map(([name, stat]) => {
+            return { name, stat }
+          })
+          if (!items.length && lastError) cb(lastError)
+          else cb(null, items)
+        }
+      } else {
+        let lastError = null
+        const knownItems = new Set()
+        for (const { value, err } of results) {
+          if (err) {
+            lastError = err
+            continue
+          }
           for (const item of value) knownItems.add(item)
         }
-      }
 
-      const items = [...knownItems]
-      if (!items.length && lastError) cb(lastError)
-      else cb(null, items)
+        const items = [...knownItems]
+        if (!items.length && lastError) cb(lastError)
+        else cb(null, items)
+      }
     })
   }
 
@@ -305,6 +354,7 @@ class MultiHyperdrive extends EventEmitter {
     throw new Error('Not Supported')
   }
 
+  // This isn't really documented anywhere and I'm not sure if it's safe to use. 🤔
   stats (path, opts, cb) {
     if (typeof opts === 'function') return this.stats(path, null, opts)
     this.resolveLatest(path, (err, drive) => {
@@ -318,10 +368,7 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   mirror () {
-    return unmirror
-
-    function unmirror () {
-    }
+    throw Error('Not Supported')
   }
 
   clear (path, opts, cb) {
@@ -347,10 +394,13 @@ class MultiHyperdrive extends EventEmitter {
 
   watch (name, onchange) {
     // TODO: Should we blindly take all updates?
+    const watchers = this.drives.map((drive) => drive.watch(name, onchange))
 
-    return unwatch
+    return { destroy: destroy }
 
-    function unwatch () {}
+    function destroy () {
+      watchers.map((watcher) => watcher.destroy())
+    }
   }
 
   mount (path, key, opts, cb) {
