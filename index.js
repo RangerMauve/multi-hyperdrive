@@ -1,7 +1,10 @@
 const EventEmitter = require('events')
 const { PassThrough } = require('stream')
 const makeDir = require('make-dir')
-const { dirname } = require('path')
+const { dirname, join } = require('path').posix
+const { Tombstone } = require('./messages')
+
+const THE_TOMB = '.tombstones'
 
 module.exports = function multiHyperdrive (primary) {
   return new MultiHyperdrive(primary)
@@ -67,15 +70,28 @@ class MultiHyperdrive extends EventEmitter {
     })
   }
 
-  runAll (method, args, cb) {
+  _runAll (method, args, cb) {
     const all = this.drives
     const total = all.length
     const results = []
 
     if (!total) return setTimeout(() => cb(null, []))
-
     for (const drive of all) {
       drive[method](...args, (err, value) => {
+        results.push({ drive, err, value })
+        if (results.length === total) cb(null, results)
+      })
+    }
+  }
+
+  _runAllDBs (method, args, cb) {
+    const all = this.drives
+    const total = all.length
+    const results = []
+
+    if (!total) return setTimeout(() => cb(null, []))
+    for (const drive of all) {
+      drive.db[method](...args, (err, value) => {
         results.push({ drive, err, value })
         if (results.length === total) cb(null, results)
       })
@@ -88,31 +104,91 @@ class MultiHyperdrive extends EventEmitter {
   // If drive1 is older, return > 0
   // If they are the same return 0
   compareStats (stat1, stat2) {
+    if (stat1 && stat2) {
+      const { ctime: date1 } = stat1
+      const { ctime: date2 } = stat2
+
+      const time1 = date1.getTime()
+      const time2 = date2.getTime()
+
+      return time2 - time1
+    }
     if (!stat1 && !stat2) return 0
     if (stat1 && !stat2) return -1
     if (!stat1 && stat2) return 1
-
-    const { ctime: time1 } = stat1
-    const { ctime: time2 } = stat2
-
-    return time2 - time1
   }
 
-  resolveLatest (path, cb) {
-    this.runAll('stat', [path], (err, results) => {
+  resolveLatest (name, cb) {
+    this.existsTombstone(name, (err, exists) => {
       if (err) return cb(err)
-      try {
-        const sorted = results
-          .filter(({ value }) => !!value)
-          .sort(({ value: stat1 }, { value: stat2 }) => this.compareStats(stat1, stat2))
+      if (exists) return cb(null, exists)
+      this._runAll('stat', [name], (err, results) => {
+        if (err) return cb(err)
+        try {
+          const sorted = results
+            .filter(({ value }) => !!value)
+            .sort(({ value: stat1 }, { value: stat2 }) => this.compareStats(stat1, stat2))
 
-        if (!sorted.length) return cb(null, this.primary)
-        const { drive } = sorted[0]
-        cb(null, drive)
-      } catch (e) {
-        cb(e)
-      }
+          if (!sorted.length) return cb(null, this.primary)
+          const { drive } = sorted[0]
+          cb(null, drive)
+        } catch (e) {
+          cb(e)
+        }
+      })
     })
+  }
+
+  // Resolves to the drive that says a tombstone exists for this path
+  existsTombstone (name, cb) {
+    const casket = join(THE_TOMB, name)
+
+    this._runAllDBs('get', [casket, { hidden: true }], (err, results) => {
+      if (err) return cb(err)
+
+      const lastTime = 0
+      let exists = null
+
+      for (const { value, drive } of results) {
+        if (!value) continue
+        const tombstone = Tombstone.decode(value)
+        const { timestamp, active } = tombstone
+
+        if ((timestamp - lastTime) > 0) {
+          exists = active ? drive : null
+        }
+      }
+
+      cb(null, exists)
+    })
+  }
+
+  setTombstone (name, active, cb) {
+    const timestamp = Date.now()
+    const tombstone = Tombstone.encode({ timestamp, active })
+    const casket = join(THE_TOMB, name)
+
+    this.writerOrPrimary.db.put(casket, tombstone, { hidden: true }, cb)
+  }
+
+  eraseTombstone (name, cb) {
+    const parent = dirname(name)
+    if (parent === name) {
+      doErase()
+    } else {
+      this.eraseTombstone(parent, (err) => {
+        if (err) return cb(err)
+        doErase()
+      })
+    }
+
+    function doErase () {
+      this.existsTombstone(name, (err, exists) => {
+        if (err) return cb(err)
+        if (!exists) return cb(null)
+        this.setTombstone(name, false, cb)
+      })
+    }
   }
 
   getContent (cb) {
@@ -187,7 +263,11 @@ class MultiHyperdrive extends EventEmitter {
     makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
       const dest = this.writerOrPrimary.createWriteStream(name, opts)
       stream.pipe(dest)
-    }).catch((e) => stream.destroy(e))
+
+      this.eraseTombstone(name, (err) => {
+        if (err) stream.destroy(err)
+      })
+    }).catch((err) => stream.destroy(err))
 
     return stream
   }
@@ -204,7 +284,13 @@ class MultiHyperdrive extends EventEmitter {
 
   writeFile (name, buf, opts, cb) {
     makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
-      this.writerOrPrimary.writeFile(name, buf, opts, cb)
+      this.writerOrPrimary.writeFile(name, buf, opts, (err, result) => {
+        if (err) return cb(err)
+        this.eraseTombstone(name, (err) => {
+          if (err) return err
+          cb(null, result)
+        })
+      })
     }).catch(cb)
   }
 
@@ -218,7 +304,9 @@ class MultiHyperdrive extends EventEmitter {
 
   mkdir (name, opts, cb) {
     if (typeof opts === 'function') return this.mkdir(name, null, cb)
-    makeDir(name, { fs: this.writerOrPrimary }).then(() => cb(null), cb)
+    makeDir(name, { fs: this.writerOrPrimary }).then(() => {
+      this.eraseTombstone(name, cb)
+    }, cb)
   }
 
   readlink (name, cb) {
@@ -256,7 +344,7 @@ class MultiHyperdrive extends EventEmitter {
 
   access (name, opts, cb) {
     if (typeof opts === 'function') return this.exists(name, null, opts)
-    this.runAll('access', [name, opts], (err, results) => {
+    this._runAll('access', [name, opts], (err, results) => {
       if (err) cb(err)
       const exists = results.find(({ err }) => !err)
       if (exists) return cb(null)
@@ -276,7 +364,7 @@ class MultiHyperdrive extends EventEmitter {
 
   readdir (name, opts = {}, cb) {
     if (typeof opts === 'function') return this.readdir(name, null, opts)
-    this.runAll('readdir', [name, opts], (err, results) => {
+    this._runAll('readdir', [name, opts], (err, results) => {
       if (err) return cb(err)
       // Honestly, I'm sorry for this code but it's a complex task
       if (opts && opts.stats) {
@@ -300,8 +388,24 @@ class MultiHyperdrive extends EventEmitter {
           const items = [...seenItems.entries()].map(([name, stat]) => {
             return { name, stat }
           })
-          if (!items.length && lastError) cb(lastError)
-          else cb(null, items)
+
+          if (!items.length) return cb(lastError, items)
+
+          let checked = 0
+          const existingItems = []
+          items.forEach((item) => {
+            const { name: itemName } = item
+            this.existsTombstone(join(name, itemName), (err, tombstone) => {
+              if (err) {
+                if (checked !== items.length) cb(err)
+                checked = items.length
+                return
+              }
+              if (!tombstone) existingItems.push(item)
+              checked++
+              if (checked === items.length) cb(null, existingItems)
+            })
+          })
         }
       } else {
         let lastError = null
@@ -315,21 +419,48 @@ class MultiHyperdrive extends EventEmitter {
         }
 
         const items = [...knownItems]
-        if (!items.length && lastError) cb(lastError)
-        else cb(null, items)
+
+        if (!items.length) return cb(lastError, items)
+
+        let checked = 0
+        const existingItems = []
+        items.forEach((item) => {
+          this.existsTombstone(join(name, item), (err, tombstone) => {
+            if (err) {
+              if (checked !== items.length) cb(err)
+              checked = items.length
+              return
+            }
+            if (!tombstone) existingItems.push(item)
+            checked++
+            if (checked === items.length) cb(null, existingItems)
+          })
+        })
       }
     })
   }
 
   unlink (name, cb) {
-    // TODO: Add tombstones
-    return this.writerOrPrimary.unlink(name, cb)
+    this.setTombstone(name, true, (err) => {
+      if (err) return cb(err)
+      return this.writerOrPrimary.unlink(name, () => {
+        // Even if we couldn't delete it, we added a tombstone so it's kind of a success
+        cb(null)
+      })
+    })
   }
 
   rmdir (name, cb) {
     if (!cb) cb = noop
-    // TODO: Add tombstones
-    return this.writerOrPrimary.rmdir(name, cb)
+    // Even if we couldn't delete it, we added a tombstone so it's kind of a success
+    this.writerOrPrimary.rmdir(name, (err) => {
+      // If the directory isn't empty, we can't delete it.
+      if (err.code === 'ENOTEMPTY') cb(err)
+      this.setTombstone(name, true, (err) => {
+        if (err) return cb(err)
+        else cb(null)
+      })
+    })
   }
 
   replicate (isInitiator, opts) {
@@ -345,7 +476,7 @@ class MultiHyperdrive extends EventEmitter {
 
   close (fd, cb) {
     if (typeof fd === 'function') {
-      this.runAll('close', [], cb)
+      this._runAll('close', [], cb)
     } else {
       fd.drive.close(fd.fd, cb)
     }
@@ -356,15 +487,15 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   // This isn't really documented anywhere and I'm not sure if it's safe to use. 🤔
-  stats (path, opts, cb) {
-    if (typeof opts === 'function') return this.stats(path, null, opts)
-    this.resolveLatest(path, (err, drive) => {
+  stats (name, opts, cb) {
+    if (typeof opts === 'function') return this.stats(name, null, opts)
+    this.resolveLatest(name, (err, drive) => {
       if (err) return cb(err)
-      drive.stats(path, opts, cb)
+      drive.stats(name, opts, cb)
     })
   }
 
-  watchStats (path, opts) {
+  watchStats (name, opts) {
     throw Error('Not Supported')
   }
 
@@ -372,17 +503,17 @@ class MultiHyperdrive extends EventEmitter {
     throw Error('Not Supported')
   }
 
-  clear (path, opts, cb) {
+  clear (name, opts, cb) {
     if (typeof opts === 'function') {
       cb = opts
       opts = null
     }
     opts = opts || {}
     if (!cb) cb = noop
-    this.runAll('clear', [path, opts], cb)
+    this._runAll('clear', [name, opts], cb)
   }
 
-  download (path, opts, cb) {
+  download (name, opts, cb) {
     // TODO: This needs to be reimplemented
     // We only want to download the latest files accross the board
     if (typeof opts === 'function') {
@@ -404,13 +535,13 @@ class MultiHyperdrive extends EventEmitter {
     }
   }
 
-  mount (path, key, opts, cb) {
-    if (typeof opts === 'function') return this.mount(path, key, null, opts)
-    return this.writerOrPrimary.mount(path, key, opts, cb)
+  mount (name, key, opts, cb) {
+    if (typeof opts === 'function') return this.mount(name, key, null, opts)
+    return this.writerOrPrimary.mount(name, key, opts, cb)
   }
 
-  unmount (path, cb) {
-    return this.writerOrPrimary.unmount(path, cb)
+  unmount (name, cb) {
+    return this.writerOrPrimary.unmount(name, cb)
   }
 
   symlink (target, linkName, cb) {
@@ -429,12 +560,12 @@ class MultiHyperdrive extends EventEmitter {
     return this.primary.registerExtension(name, handlers)
   }
 
-  setMetadata (path, key, value, cb) {
-    return this.writerOrPrimary.setMetadata(path, key, value, cb)
+  setMetadata (name, key, value, cb) {
+    return this.writerOrPrimary.setMetadata(name, key, value, cb)
   }
 
-  removeMetadata (path, key, cb) {
-    return this.writerOrPrimary.removeMetadata(path, key, cb)
+  removeMetadata (name, key, cb) {
+    return this.writerOrPrimary.removeMetadata(name, key, cb)
   }
 
   createTag (name, version, cb) {

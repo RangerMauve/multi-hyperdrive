@@ -11,6 +11,20 @@ Inspired by [peerfs](https://github.com/karissa/peerfs/) and [kappa-drive](https
   - Doesn't handle replication for you
 - Support (most) hyperdrive methods / properties
 
+## How it works
+
+tl;dr kinda like stacking filesystems on top of each other and merging them into one.
+
+- Keeps track of a set of hyperdrives
+- The `primary` drive set the `key` and `peers` and stuff.
+- Whenever you want to do a write operation, find the first writable drive
+- Whenever you read, it'll compare the `ctime` (changed timestamp) of the file across drives to find the most recent one and read from that drive
+- Whenever you delete something, it'll save a `tombstone` in the hypertrie of your writer drive
+	- Tombstones contain an `active` property which when true means `this has been deleted` and when `false` means `a delete got overridden`
+  - Tombstones also contain a `timestamp` for when it was created, so that newer tombstones override older ones
+  - Reading from directories or reading files takes tombstones into account
+  - Writing a file or creating a directory will override any tombstones set there
+
 ## Usage
 
 ```js
@@ -83,13 +97,6 @@ Get the list of all drives that were added to this multi-hyperdrive.
 Add a hyperdrive to this multi-hyperdrive.
 Each drive will be added to the resolution mechanism.
 
-### multi.runAll (method, args, cb)
-
-Run a method on all drives at once and collect results.
-`method` should be the string method to invoke on the drives.
-`args` should be an array of arguments to pass to the method.
-`cb` will get invoked with either an error or `null` and an array of results that look like `{drive, err, value}`.
-
 ### multi.compareStats (stat1, stat2)
 
 This is the function used to resolve which drive has the latest version of a path.
@@ -100,6 +107,24 @@ This can be replaced with custom resolving logic.
 
 Use this for finding which drive has the latest version of a path.
 The callback will get a reference to the `hyperdrive` that has the latest version, or an error if none is found.
+
+### multi.existsTombstone(path, cb)
+
+You can use this to check whether a drive has an active tombstone for this path.
+The cb will either get a `null` if no active tombstone exists, or a reference to the hyperdrive that set this tombstone.
+
+### multi.setTombstone(path, active, cb)
+
+You can use this to manually add a tombstone for a given path.
+Requires a writable drive to be added first.
+Set `active` to `true` if you wish this file to be marked as deleted and `false` to set is as not deleted.
+If you want to get rid of tombstones, you should probably use `multi.eraseTombstone` instead.
+
+### multi.eraseTombstone(path, cb)
+
+Erase the tombstone for a given path and it's parent paths (if tombstones exist).
+Does nothing if no tombstones are set.
+Requires a writable drive to be added first.
 
 ### multi.open (path, flags, cb)
 
@@ -186,20 +211,21 @@ Try to load data at a given path. Will result in an error if the path doesn't ex
 
 ### multi.readdir (path, opts = {}, cb)
 
-Read the files within a directory as an array of file/folder names.
-Files from the directories of all drives will be combined together.
+Read the entries within a directory as an array of file/folder names.
+Entries from the directories of all drives will be combined together.
+Entries that got marked as deleted with tombstones will be excluded.
 You can pass `stats: true` to get a list of objects that look like `{stat, name}` to get the stats in addition to the name.
 
 ### multi.unlink (path, cb)
 
-Delete a file from your drive.
-You cannot delete other people's files.
+Delete a file from the drive.
+If the file was originally created by another person, a tombstone entry will be created in your writable drive to mark it as deleted.
 Requires a writable drive to be added first.
 
 ### multi.rmdir (path, cb)
 
-Delete a directory from your drive.
-You currently cannot delete directories from others' drives.
+Delete a directory from the drive.
+If the directory was originally created by another person, a tombstone entry will be created in your writable drive to mark it as deleted.
 Requires a writable drive to be added first.
 
 ### multi.replicate (isInitiator, opts)
@@ -318,14 +344,11 @@ Requires a writable drive to be added first.
 
 ## TODO:
 
-- Tombstones for deleted files
- - [ ] Basic tombstones for deletion. Stored in hidden folder in the trie
- - [ ] Override old tombstones on write
 - [ ] Support listing mounts from all writers at once
 - [ ] Error out when writing a file where another peer has a folder or vise versa
-- Vector clocks or blook clocks in metadata
+- Vector clocks or bloom clocks in metadata
  - [ ] When writing to a file, include vector of versions of all drives. Maybe use bloom clocks?
- - [ ] Resolve conflicts with vector clocks instead of wall clocks
+ - [ ] Resolve conflicts with vector clocks instead of `ctime` wall clocks
 - [ ] Figure out what 'version' means for multi-hyperdrive
  - [ ] Encode `version` as a bloom clock or something
  - [ ] Support `tags` feature

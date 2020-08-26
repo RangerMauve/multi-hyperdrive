@@ -4,7 +4,8 @@
   "description": "Take a bunch of hyperdrives, and read from them as if they were one.",
   "main": "index.js",
   "scripts": {
-    "test": "standard --fix && node test"
+    "test": "standard --fix && node test",
+    "build": "protocol-buffers -o ./messages.js schemas.proto"
   },
   "repository": {
     "type": "git",
@@ -30,6 +31,8 @@
     "tape": "^5.0.1"
   },
   "dependencies": {
-    "make-dir": "^3.1.0"
+    "make-dir": "^3.1.0",
+    "protocol-buffers": "^4.2.0",
+    "protocol-buffers-encodings": "^1.1.0"
   }
 }

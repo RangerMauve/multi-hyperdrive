@@ -13,14 +13,14 @@ test('Read from existing drive', (t) => {
 
     drive.writeFile('example.txt', 'Hello World!', () => {
       multi.readFile('example.txt', 'utf8', (err, data) => {
-        t.notOk(err, 'able to read')
+        t.error(err, 'able to read')
         t.equal(data, 'Hello World!', 'got file contents')
 
         multi.readdir('/', (err2, files) => {
-          t.notOk(err2, 'able to read dir')
+          t.error(err2, 'able to read dir')
           t.deepEqual(files, ['example.txt'], 'got files from drive')
           multi.readdir('/', { stat: true }, (err3, stats) => {
-            t.notOk(err3, 'able to read dir stats')
+            t.error(err3, 'able to read dir stats')
             t.equal(stats.length, 1, 'got stats from drive')
             t.end()
             close()
@@ -71,11 +71,11 @@ test('Read from multiple non-conflicting drives', (t) => {
 
     function verify (cb) {
       multi.readFile('example2.txt', 'utf8', (err, data) => {
-        t.notOk(err, 'able to read')
+        t.error(err, 'able to read')
         t.equal(data, 'Hello World!', 'got file contents')
 
         multi.readdir('/', (err2, files) => {
-          t.notOk(err2, 'able to read dir')
+          t.error(err2, 'able to read dir')
           t.deepEqual(files, ['example.txt', 'example2.txt'], 'got files from drives')
           t.end()
           cb()
@@ -132,11 +132,11 @@ test('Read from multiple drives with conflicting files', (t) => {
 
     function verify (cb) {
       multi.readFile('example.txt', 'utf8', (err, data) => {
-        t.notOk(err, 'able to read')
+        t.error(err, 'able to read')
         t.equal(data, 'New', 'got newer contents')
 
         multi.readdir('/', (err2, files) => {
-          t.notOk(err2, 'able to read dir')
+          t.error(err2, 'able to read dir')
           t.deepEqual(files, ['example.txt'], 'got files from drives')
           t.end()
           cb()
@@ -179,8 +179,61 @@ test('Write files to the drive', (t) => {
 
         multi.addDrive(drive3, () => {
           multi.writeFile('/example.txt', 'Hello World', (e) => {
-            t.notOk(e, 'no error after adding a writer')
+            t.error(e, 'no error after adding a writer')
             cleanup()
+          })
+        })
+      })
+    })
+
+    function cleanup () {
+      t.end()
+      close1()
+      close2()
+    }
+  }, (e) => t.error(e))
+})
+
+test('Delete other peers files and directories', (t) => {
+  t.plan(4)
+
+  Promise.all([
+    SDK({ persist: false }),
+    SDK({ persist: false })
+  ]).then(([{
+    Hyperdrive: Hyperdrive1,
+    close: close1
+  }, {
+    Hyperdrive: Hyperdrive2,
+    close: close2
+  }]) => {
+    t.plan(6)
+
+    const drive1 = Hyperdrive1('example')
+    const drive2 = Hyperdrive2('example')
+
+    drive1.writeFile('/example.txt', 'Hello World', () => {
+      // Clone the first drive so that we can't unlink on it directly
+      const clone = Hyperdrive2(drive1.key)
+
+      clone.ready(() => {
+        const multi = multiHyperdrive(clone)
+
+        multi.addDrive(drive2, () => {
+          multi.unlink('/example.txt', (err) => {
+            t.error(err, 'no error deleting file')
+            multi.readdir('/', (err, files) => {
+              t.error(err, 'no error reading directory')
+              t.deepEqual(files, [], 'no files show up in readdir')
+              multi.writeFile('/example.txt', 'Hello World Again', (err) => {
+                t.error(err, 'no error writing to tombstoned directory')
+                multi.readdir('/', (err, files) => {
+                  t.error(err, 'no error reading directory')
+                  t.deepEqual(files, ['example.txt'], 'file shows up again')
+                  cleanup()
+                })
+              })
+            })
           })
         })
       })
