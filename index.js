@@ -63,6 +63,7 @@ class MultiHyperdrive extends EventEmitter {
   addDrive (drive, cb) {
     drive.ready(() => {
       this.sources.set(drive.key.toString('hex'), drive)
+      if (cb) cb()
     })
   }
 

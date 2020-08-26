@@ -45,7 +45,7 @@ test('Read from multiple non-conflicting drives', (t) => {
     close: close2
   }]) => {
     const drive1 = Hyperdrive1('example2')
-    const drive2 = Hyperdrive1('example2')
+    const drive2 = Hyperdrive2('example2')
 
     const multi = multiHyperdrive(drive1)
 
@@ -104,7 +104,7 @@ test('Read from multiple drives with conflicting files', (t) => {
     close: close2
   }]) => {
     const drive1 = Hyperdrive1('example2')
-    const drive2 = Hyperdrive1('example2')
+    const drive2 = Hyperdrive2('example2')
 
     const multi = multiHyperdrive(drive1)
 
@@ -145,6 +145,49 @@ test('Read from multiple drives with conflicting files', (t) => {
     }
 
     function cleanup () {
+      close1()
+      close2()
+    }
+  }, (e) => t.error(e))
+})
+
+test('Write files to the drive', (t) => {
+  t.plan(4)
+
+  Promise.all([
+    SDK({ persist: false }),
+    SDK({ persist: false })
+  ]).then(([{
+    Hyperdrive: Hyperdrive1,
+    close: close1
+  }, {
+    Hyperdrive: Hyperdrive2,
+    close: close2
+  }]) => {
+    t.plan(2)
+
+    const drive1 = Hyperdrive1('example')
+
+    drive1.ready(() => {
+      const drive2 = Hyperdrive2(drive1.key)
+
+      const multi = multiHyperdrive(drive2)
+
+      multi.writeFile('/example.txt', 'Hello World', (e) => {
+        t.ok(e, 'error writing without writers')
+        var drive3 = Hyperdrive2('example')
+
+        multi.addDrive(drive3, () => {
+          multi.writeFile('/example.txt', 'Hello World', (e) => {
+            t.notOk(e, 'no error after adding a writer')
+            cleanup()
+          })
+        })
+      })
+    })
+
+    function cleanup () {
+      t.end()
       close1()
       close2()
     }
