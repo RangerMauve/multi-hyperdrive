@@ -6,10 +6,6 @@ const { Tombstone } = require('./messages')
 
 const THE_TOMB = '.tombstones'
 
-module.exports = function multiHyperdrive (primary) {
-  return new MultiHyperdrive(primary)
-}
-
 class MultiHyperdrive extends EventEmitter {
   constructor (primary) {
     super()
@@ -588,5 +584,11 @@ class MultiHyperdrive extends EventEmitter {
     throw new Error('Not Supported')
   }
 }
+
+module.exports = function multiHyperdrive (primary) {
+  return new MultiHyperdrive(primary)
+}
+
+module.exports.MultiHyperdrive = MultiHyperdrive
 
 function noop () {}
