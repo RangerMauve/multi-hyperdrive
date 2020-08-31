@@ -92,12 +92,36 @@ Get the first `writable` hyperdrive instance that was added.
 
 Get the list of all drives that were added to this multi-hyperdrive.
 
+### multi.on('peer-add', peer)
+
+Emitted when the primary drive gets a new peer connection
+
+### multi.on('peer-open', peer)
+
+Emitted when a peer connection on the primary drive gets fully established.
+This is where you can send extension messages or get the peer's `remotePublicKey`
+
+### multi.on('peer-remove', peer)
+
+Emitted when a primary drive loses a peer connection.
+
 ### multi.addDrive (drive, cb)
 
 Add a hyperdrive to this multi-hyperdrive.
 Each drive will be added to the resolution mechanism.
 
-### multi.compareStats (stat1, stat2)
+### const drive = multi.hasDrive (key)
+
+Check whether a drive is already part of this multi-hyperdrive.
+`key` is the key of the drive you want to check for.
+`drive` will be `undefined` if this drive has not been added.
+Not that you might have race conditions if you invoke this method while an `addDrive` call is still in progress, so try to avoid that situation.
+
+### multi.removeDrive(key)
+
+Remove a drive from this multi-hyperdrive based on it's key
+
+### const comparison = multi.compareStats (stat1, stat2)
 
 This is the function used to resolve which drive has the latest version of a path.
 It must return `0` if two drives have the same version, `-1` if the first stat has a newer version, or `1` if the second `stat` has a newer version.

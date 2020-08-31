@@ -18,6 +18,44 @@ class MultiHyperdrive extends EventEmitter {
     // TODO: Listen on events from primary drive and re-emit them
 
     this.addDrive(primary)
+
+    const onContentFeed = (feed) => this.emit('content-feed', feed)
+    const onMetadataFeed = (feed) => this.emit('metadata-feed', feed)
+    const onMount = (trie) => this.emit('mount', trie)
+
+    const onClose = () => this.emit('close')
+    const onError = (err) => this.emit('error', err)
+    const onUpdate = () => this.emit('update')
+
+    const onPeerAdd = (peer) => this.emit('peer-add', peer)
+    const onPeerOpen = (peer) => this.emit('peer-open', peer)
+    const onPeerRemove = (peer) => this.emit('peer-remove', peer)
+
+    primary.on('content-feed', onContentFeed)
+    primary.on('metadata-feed', onMetadataFeed)
+    primary.on('mount', onMount)
+
+    primary.on('close', onClose)
+    primary.on('error', onError)
+    primary.on('update', onUpdate)
+
+    primary.on('peer-add', onPeerAdd)
+    primary.on('peer-open', onPeerOpen)
+    primary.on('peer-remove', onPeerRemove)
+
+    this._unlisten = () => {
+      primary.removeListener('content-feed', onContentFeed)
+      primary.removeListener('metadata-feed', onMetadataFeed)
+      primary.removeListener('mount', onMount)
+
+      primary.removeListener('close', onClose)
+      primary.removeListener('error', onError)
+      primary.removeListener('update', onUpdate)
+
+      primary.removeListener('peer-add', onPeerAdd)
+      primary.removeListener('peer-open', onPeerOpen)
+      primary.removeListener('peer-remove', onPeerRemove)
+    }
   }
 
   get key () {
@@ -64,6 +102,17 @@ class MultiHyperdrive extends EventEmitter {
       this.sources.set(drive.key.toString('hex'), drive)
       if (cb) cb()
     })
+    drive.once('close', () => {
+      this.removeDrive(drive.key)
+    })
+  }
+
+  hasDrive (key) {
+    return this.sources.get(key.toString('hex'))
+  }
+
+  removeDrive (key) {
+    return this.sources.delete(key.toString('hex'))
   }
 
   _runAll (method, args, cb) {
@@ -472,7 +521,10 @@ class MultiHyperdrive extends EventEmitter {
 
   close (fd, cb) {
     if (typeof fd === 'function') {
-      this._runAll('close', [], cb)
+      this._runAll('close', [], (err) => {
+        this._unlisten()
+        cb(err)
+      })
     } else {
       fd.drive.close(fd.fd, cb)
     }
