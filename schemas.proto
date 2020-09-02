@@ -1,0 +1,4 @@
+message Tombstone {
+  required bool active = 1;
+  optional uint32 timestamp = 2;
+}

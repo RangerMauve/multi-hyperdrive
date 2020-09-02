@@ -379,3 +379,19 @@ Requires a writable drive to be added first.
 - [ ] Support `truncate` being called on files not in your writer drive.
 - Manage download/upload to only include latest files across all drives
  - [ ] `download` should traverse multi-hyperdrive
+
+## Credits
+
+Ce logiciel est une réalisation de Wapikoni Mobile, Uhu Labos Nomades et du Bureau de l’engagement communautaire de l’université Concordia.
+Projet financé dans le cadre de l’Entente sur le développement culturel de Montréal conclue entre la Ville de Montréal et gouvernement du Québec.
+
+This project is made possible thanks to the collaboration of Wapikoni mobile and its technical team, Uhu Labos Nomades (Indigenous media arts training project working with Indigenous youth) and Concordia University’s Office of Community Engagement.
+This project was funded under the Montreal cultural development agreement between the city of Montreal and the government of Quebec.
+
+[![Wapikoni Mobile](logos/wapikoni.png)](http://www.wapikoni.ca/home)
+[![Uhu](logos/uhu.jpg)](https://www.facebook.com/uhulabosnomades/)
+[![Concordia University](logos/concordia.png)](http://www.concordia.ca/)
+[![Mauve Software Inc.](logos/mauvesoftwareinc.png)](https://software.mauve.moe/)
+
+![Quebec](logos/quebec.png)
+![Montreal](logos/montreal.jpg)
