@@ -238,7 +238,7 @@ Try to load data at a given path. Will result in an error if the path doesn't ex
 Read the entries within a directory as an array of file/folder names.
 Entries from the directories of all drives will be combined together.
 Entries that got marked as deleted with tombstones will be excluded.
-You can pass `stats: true` to get a list of objects that look like `{stat, name}` to get the stats in addition to the name.
+You can pass `includeStats: true` to get a list of objects that look like `{stat, name}` to get the stats in addition to the name.
 
 ### multi.unlink (path, cb)
 

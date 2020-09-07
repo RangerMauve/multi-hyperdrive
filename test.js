@@ -4,7 +4,7 @@ const SDK = require('dat-sdk')
 const multiHyperdrive = require('./')
 
 test('Read from existing drive', (t) => {
-  t.plan(6)
+  t.plan(8)
 
   SDK({ persist: false }).then(({ Hyperdrive, close }) => {
     const drive = Hyperdrive('example')
@@ -19,9 +19,13 @@ test('Read from existing drive', (t) => {
         multi.readdir('/', (err2, files) => {
           t.error(err2, 'able to read dir')
           t.deepEqual(files, ['example.txt'], 'got files from drive')
-          multi.readdir('/', { stat: true }, (err3, stats) => {
+          multi.readdir('/', { includeStats: true }, (err3, stats) => {
             t.error(err3, 'able to read dir stats')
             t.equal(stats.length, 1, 'got stats from drive')
+            const [statData] = stats
+            const { name, stat } = statData
+            t.equal(name, 'example.txt', 'got expected name')
+            t.ok(stat, 'got a stat object')
             t.end()
             close()
           })

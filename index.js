@@ -412,7 +412,7 @@ class MultiHyperdrive extends EventEmitter {
     this._runAll('readdir', [name, opts], (err, results) => {
       if (err) return cb(err)
       // Honestly, I'm sorry for this code but it's a complex task
-      if (opts && opts.stats) {
+      if (opts && opts.includeStats) {
         // Map seen files to the latest stat for it
         // This is so that we can determine the latest item individually
         const seenItems = new Map()
@@ -427,8 +427,8 @@ class MultiHyperdrive extends EventEmitter {
             if (seenItems.has(name)) {
               const existing = seenItems.get(name)
               // If the new stat is "newer" than the old one, replace it
-              if (this.compareStats(existing, stat) > 0) seenItems.put(name, stat)
-            } else seenItems.put(name, stat)
+              if (this.compareStats(existing, stat) > 0) seenItems.set(name, stat)
+            } else seenItems.set(name, stat)
           }
           const items = [...seenItems.entries()].map(([name, stat]) => {
             return { name, stat }
