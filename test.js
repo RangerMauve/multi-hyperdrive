@@ -3,7 +3,7 @@ const SDK = require('dat-sdk')
 
 const multiHyperdrive = require('./')
 
-test('Read from existing drive', (t) => {
+test('Read from primary drive', (t) => {
   t.plan(8)
 
   SDK({ persist: false }).then(({ Hyperdrive, close }) => {
@@ -29,6 +29,27 @@ test('Read from existing drive', (t) => {
             t.end()
             close()
           })
+        })
+      })
+    })
+  }, (e) => t.error(e))
+})
+
+test('Write to primary through multi-hyperdrive', (t) => {
+  SDK({ persist: false }).then(({ Hyperdrive, close }) => {
+    const drive = Hyperdrive('example')
+
+    const multi = multiHyperdrive(drive)
+
+    multi.writeFile('/example1.txt', 'Hello world!', (err) => {
+      t.error(err, 'able to write file')
+      multi.writeFile('/example2.txt', 'Hello, world?', (err) => {
+        t.error(err, 'able to write another file')
+        multi.readdir('/', (err, files) => {
+          t.error(err, 'able to read files from dir')
+          t.deepEquals(files, ['example2.txt', 'example1.txt'], 'got expected files in the dir')
+          t.end()
+          close()
         })
       })
     })

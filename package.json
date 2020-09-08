@@ -31,7 +31,6 @@
     "tape": "^5.0.1"
   },
   "dependencies": {
-    "make-dir": "^3.1.0",
     "protocol-buffers": "^4.2.0",
     "protocol-buffers-encodings": "^1.1.0"
   }

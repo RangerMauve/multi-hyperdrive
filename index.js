@@ -1,6 +1,5 @@
 const EventEmitter = require('events')
 const { PassThrough } = require('stream')
-const makeDir = require('make-dir')
 const { dirname, join } = require('path').posix
 const { Tombstone } = require('./messages')
 
@@ -194,7 +193,9 @@ class MultiHyperdrive extends EventEmitter {
       const lastTime = 0
       let exists = null
 
-      for (const { value, drive } of results) {
+      for (const { value: result, drive } of results) {
+        if (!result) continue
+        const { value } = result
         if (!value) continue
         const tombstone = Tombstone.decode(value)
         const { timestamp, active } = tombstone
@@ -218,20 +219,21 @@ class MultiHyperdrive extends EventEmitter {
 
   eraseTombstone (name, cb) {
     const parent = dirname(name)
+
+    const doErase = () => {
+      this.existsTombstone(name, (err, exists) => {
+        if (err) return cb(err)
+        if (!exists) return cb(null)
+        this.setTombstone(name, false, cb)
+      })
+    }
+
     if (parent === name) {
       doErase()
     } else {
       this.eraseTombstone(parent, (err) => {
         if (err) return cb(err)
         doErase()
-      })
-    }
-
-    function doErase () {
-      this.existsTombstone(name, (err, exists) => {
-        if (err) return cb(err)
-        if (!exists) return cb(null)
-        this.setTombstone(name, false, cb)
       })
     }
   }
@@ -252,9 +254,10 @@ class MultiHyperdrive extends EventEmitter {
     const writable = flags.includes('a') || flags.includes('w')
 
     if (writable) {
-      makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+      ensureDir(dirname(name), this.writerOrPrimary, (err) => {
+        if (err) return cb(err)
         openFD(this.writerOrPrimary)
-      }).catch(cb)
+      })
     } else {
       this.resolveLatest(name, (err, drive) => {
         if (err) return cb(err)
@@ -305,14 +308,15 @@ class MultiHyperdrive extends EventEmitter {
     if (!opts) opts = {}
     const stream = new PassThrough()
 
-    makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+    ensureDir(dirname(name), this.writerOrPrimary, (err) => {
+      if (err) return stream.destroy(err)
       const dest = this.writerOrPrimary.createWriteStream(name, opts)
       stream.pipe(dest)
 
       this.eraseTombstone(name, (err) => {
         if (err) stream.destroy(err)
       })
-    }).catch((err) => stream.destroy(err))
+    })
 
     return stream
   }
@@ -328,7 +332,9 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   writeFile (name, buf, opts, cb) {
-    makeDir(dirname(name), { fs: this.writerOrPrimary }).then(() => {
+    if (typeof opts === 'function') return this.writeFile(name, buf, null, opts)
+    ensureDir(dirname(name), this.writerOrPrimary, (err) => {
+      if (err) return cb(err)
       this.writerOrPrimary.writeFile(name, buf, opts, (err, result) => {
         if (err) return cb(err)
         this.eraseTombstone(name, (err) => {
@@ -336,7 +342,7 @@ class MultiHyperdrive extends EventEmitter {
           cb(null, result)
         })
       })
-    }).catch(cb)
+    })
   }
 
   truncate (name, size, cb) {
@@ -349,9 +355,10 @@ class MultiHyperdrive extends EventEmitter {
 
   mkdir (name, opts, cb) {
     if (typeof opts === 'function') return this.mkdir(name, null, cb)
-    makeDir(name, { fs: this.writerOrPrimary }).then(() => {
+    ensureDir(name, this.writerOrPrimary, (err) => {
+      if (err) return cb(err)
       this.eraseTombstone(name, cb)
-    }, cb)
+    })
   }
 
   readlink (name, cb) {
@@ -570,6 +577,7 @@ class MultiHyperdrive extends EventEmitter {
     }
     opts = opts || {}
     if (!cb) cb = noop
+    this._runAll('download', [name, opts], cb)
   }
 
   watch (name, onchange) {
@@ -644,3 +652,14 @@ module.exports = function multiHyperdrive (primary) {
 module.exports.MultiHyperdrive = MultiHyperdrive
 
 function noop () {}
+
+function ensureDir (path, drive, cb) {
+  drive.exists(path, (exists) => {
+    if (exists) return cb(null)
+    const parent = dirname(path)
+    ensureDir(parent, drive, (err) => {
+      if (err) return cb(err)
+      drive.mkdir(path, cb)
+    })
+  })
+}
