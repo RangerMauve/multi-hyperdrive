@@ -1,6 +1,6 @@
 {
   "name": "multi-hyperdrive",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Take a bunch of hyperdrives, and read from them as if they were one.",
   "main": "index.js",
   "scripts": {
