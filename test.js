@@ -35,6 +35,32 @@ test('Read from primary drive', (t) => {
   }, (e) => t.error(e))
 })
 
+test('Add/Remove drive events', (t) => {
+  SDK({ persist: false }).then(({ Hyperdrive, close }) => {
+    const drive = Hyperdrive('example')
+
+    const multi = multiHyperdrive(drive)
+
+    drive.ready(() => {
+      const drive2 = Hyperdrive('example2')
+
+      multi.on('drive-add', (somedrive) => {
+        t.equal(somedrive, drive2, 'drive emitted on add')
+      })
+
+      multi.on('drive-remove', (somedrive) => {
+        t.equal(somedrive, drive2, 'drive emitted on remove')
+        t.end()
+      })
+
+      multi.addDrive(drive2, () => {
+        t.pass('Able to add drive')
+        multi.removeDrive(drive2.key)
+      })
+    })
+  }, (e) => t.error(e))
+})
+
 test('Write to primary through multi-hyperdrive', (t) => {
   SDK({ persist: false }).then(({ Hyperdrive, close }) => {
     const drive = Hyperdrive('example')

@@ -105,6 +105,14 @@ This is where you can send extension messages or get the peer's `remotePublicKey
 
 Emitted when a primary drive loses a peer connection.
 
+### multi.on('drive-add', drive)
+
+Emitted when a drive has been added.
+
+### multi.on('drive-remove', drive)
+
+Emitted when a drive has been removed.
+
 ### multi.addDrive (drive, cb)
 
 Add a hyperdrive to this multi-hyperdrive.

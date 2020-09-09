@@ -100,6 +100,7 @@ class MultiHyperdrive extends EventEmitter {
     drive.ready(() => {
       this.sources.set(drive.key.toString('hex'), drive)
       if (cb) cb()
+      this.emit('drive-add', drive)
     })
     drive.once('close', () => {
       this.removeDrive(drive.key)
@@ -111,7 +112,18 @@ class MultiHyperdrive extends EventEmitter {
   }
 
   removeDrive (key) {
-    return this.sources.delete(key.toString('hex'))
+    const keyString = key.toString('hex')
+    const drive = this.sources.get(keyString)
+
+    if (!drive) return false
+
+    this.sources.delete(keyString)
+
+    process.nextTick(() => {
+      this.emit('drive-remove', drive)
+    })
+
+    return drive
   }
 
   _runAll (method, args, cb) {
