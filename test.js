@@ -271,3 +271,23 @@ test('Delete other peers files and directories', (t) => {
     }
   }, (e) => t.error(e))
 })
+
+test('Able to read dir after setting a tombstone', (t) => {
+  SDK({ persist: false }).then(({ Hyperdrive, close }) => {
+    const drive = Hyperdrive('example')
+
+    drive.writeFile('/example.txt', 'Hello World', () => {
+      const multi = multiHyperdrive(drive)
+      multi.setTombstone('/example.txt', true, (err) => {
+        t.error(err, 'able to set tombstone')
+        multi.readdir('/', (err) => {
+          t.error(err, 'able to read directory')
+          t.end()
+          close()
+        })
+      })
+    })
+  }, (e) => t.error(e))
+})
+
+test.skip('Able to combine result from readdir')

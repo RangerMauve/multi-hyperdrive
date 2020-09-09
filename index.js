@@ -437,28 +437,28 @@ class MultiHyperdrive extends EventEmitter {
               if (this.compareStats(existing, stat) > 0) seenItems.set(name, stat)
             } else seenItems.set(name, stat)
           }
-          const items = [...seenItems.entries()].map(([name, stat]) => {
-            return { name, stat }
-          })
-
-          if (!items.length) return cb(lastError, items)
-
-          let checked = 0
-          const existingItems = []
-          items.forEach((item) => {
-            const { name: itemName } = item
-            this.existsTombstone(join(name, itemName), (err, tombstone) => {
-              if (err) {
-                if (checked !== items.length) cb(err)
-                checked = items.length
-                return
-              }
-              if (!tombstone) existingItems.push(item)
-              checked++
-              if (checked === items.length) cb(null, existingItems)
-            })
-          })
         }
+        const items = [...seenItems.entries()].map(([name, stat]) => {
+          return { name, stat }
+        })
+
+        if (!items.length) return cb(lastError, items)
+
+        let checked = 0
+        const existingItems = []
+        items.forEach((item) => {
+          const { name: itemName } = item
+          this.existsTombstone(join(name, itemName), (err, tombstone) => {
+            if (err) {
+              if (checked !== items.length) cb(err)
+              checked = items.length
+              return
+            }
+            if (!tombstone) existingItems.push(item)
+            checked++
+            if (checked === items.length) cb(null, existingItems)
+          })
+        })
       } else {
         let lastError = null
         const knownItems = new Set()
