@@ -31,6 +31,7 @@
     "tape": "^5.0.1"
   },
   "dependencies": {
+    "hyper-typings": "github:rangermauve/hyper-typings",
     "protocol-buffers": "^4.2.0",
     "protocol-buffers-encodings": "^1.1.0"
   }
